@@ -1,9 +1,8 @@
-from typing import Tuple
-
 import numpy as np
 from torch import nn, Tensor
 from torch.utils.data import Dataset
 
+from envs import Converter
 from models.datasets import NonSequentialDataset
 from models.model import Model, ModelFactory
 
@@ -17,18 +16,18 @@ class MLP(Model):
     This MLP model is a actor critic style one with shared input layers for both policy and value.
     """
 
-    def __init__(self, state_space: Tuple, action_space: Tuple):
-        assert len(state_space) == 1, 'Only flat spaces supported by MLP model'
-        assert len(action_space) == 1, 'Only flat action spaces supported by MLP model'
+    def __init__(self, state_space: Converter, action_space: Converter):
+        assert len(state_space.shape) == 1, 'Only flat spaces supported by MLP model'
+        assert len(action_space.shape) == 1, 'Only flat action spaces supported by MLP model'
         super().__init__(state_space, action_space)
         self.input = nn.Sequential(
-            nn.Linear(state_space[0], 16),
-            nn.ReLU(inplace=True),
-            nn.Linear(16, 16),
-            nn.ReLU(inplace=True)
+            nn.Linear(state_space.shape[0], 64),
+            nn.Tanh(),
+            nn.Linear(64, 64),
+            nn.Tanh()
         )
-        self.policy_out = nn.Linear(16, action_space[0])
-        self.value_out = nn.Linear(16, 1)
+        self.policy_out = self.action_space.policy_out_model(64)
+        self.value_out = nn.Linear(64, 1)
 
     def forward(self, state):
         x = self.input(state)
@@ -57,14 +56,16 @@ class MLP(Model):
 
 
 class MLPFactory(ModelFactory):
-    def create(self, state_space: Tuple, action_space: Tuple) -> Model:
+    def create(self, state_space: Converter, action_space: Converter) -> Model:
         return MLP(state_space, action_space)
 
 
 if __name__ == '__main__':
     import torch
+    from gym.spaces import Box, Discrete
 
-    model = MLP.factory().create((4,), (2,))
+    model = MLP.factory().create(Converter.for_space(Box(0, 1, (4,), np.float32)),
+                                 Converter.for_space(Discrete(2)))
     assert isinstance(model, MLP)
 
     assert model.value(torch.tensor([[1., 2., 3., 4.], [4., 5., 6., 7.]])).shape == (2, 1)

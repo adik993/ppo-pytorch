@@ -66,9 +66,14 @@ class Runner:
         return (self.env.n_envs, n_steps, *observation_shape[1:])
 
 
-if __name__ == '__main__':
-    from agents.random_agent import RandomAgent
+class RandomRunner(Runner):
+    def __init__(self, env: MultiEnv):
+        from agents import RandomAgent
+        super().__init__(env, RandomAgent(env.action_space))
 
+
+if __name__ == '__main__':
+    from agents import RandomAgent
     env = MultiEnv('CartPole-v1', 2)
     runner = Runner(env, RandomAgent(env.action_space))
     states, actions, rewards, dones = runner.run(100, True)

@@ -5,6 +5,8 @@ import numpy as np
 from torch import nn, Tensor
 from torch.utils.data import Dataset
 
+from envs import Converter
+
 
 class Model(nn.Module, metaclass=ABCMeta):
     """
@@ -19,7 +21,7 @@ class Model(nn.Module, metaclass=ABCMeta):
     return a object that will construct desired implementation of the ``Model``
     """
 
-    def __init__(self, state_space: Tuple[int, ...], action_space: Tuple[int, ...]):
+    def __init__(self, state_space: Converter, action_space: Converter):
         """
         All the implementations must have this constructor signature
         :param state_space: tuple with state space size
@@ -83,7 +85,7 @@ class ModelFactory:
     """
 
     @abstractmethod
-    def create(self, state_space: Tuple, action_space: Tuple) -> Model:
+    def create(self, state_space: Converter, action_space: Converter) -> Model:
         """
         Instantiates ``Model`` object
         :param state_space: state space to be passed to model constructor

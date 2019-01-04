@@ -17,5 +17,5 @@ class RandomAgent(Agent):
     def act(self, state) -> np.ndarray:
         return np.asarray([self.action_space.sample() for _ in state])
 
-    def train(self, states: np.ndarray, actions: np.ndarray, rewards: np.ndarray, dones: np.ndarray):
+    def _train(self, states: np.ndarray, actions: np.ndarray, rewards: np.ndarray, dones: np.ndarray):
         pass

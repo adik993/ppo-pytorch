@@ -39,6 +39,8 @@ class SubProcessEnv(Process):
             elif command == 'seed':
                 self.pipe.send(env.seed(args))
             elif command == 'reset':
+                if steps > 0:
+                    print(f'[{self.env_id}] steps: {steps} reward: {collected_reward} unfinished')
                 steps = 0
                 collected_reward = 0
                 self.pipe.send(env.reset())
