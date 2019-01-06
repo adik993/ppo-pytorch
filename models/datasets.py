@@ -29,31 +29,3 @@ class NonSequentialDataset(Dataset):
 
     def __len__(self):
         return len(self.arrays[0])
-
-
-if __name__ == '__main__':
-    states = np.array([
-        [[1, 1], [2, 2], [3, 3], [4, 4]],
-        [[5, 5], [6, 6], [7, 7], [8, 8]]
-    ])
-    rewards = np.array([
-        [10, 20, 30, 40],
-        [50, 60, 70, 80]
-    ])
-    dones = np.array([
-        [0, 1, 0, 1],
-        [0, 1, 0, 1]
-    ])
-
-    dataset = NonSequentialDataset(states, rewards, dones)
-    assert len(dataset) == 8
-    for i in range(len(dataset)):
-        state, reward, done = dataset[i]
-        assert np.alltrue(state == np.array([i + 1, i + 1]))
-        assert reward == (i + 1) * 10
-        assert done == i % 2
-
-    for state, reward, done in DataLoader(dataset, batch_size=2, shuffle=False):
-        print(state)
-        print(reward)
-        print(done)

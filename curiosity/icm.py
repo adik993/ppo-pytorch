@@ -76,7 +76,6 @@ class MlpICMModel(ICMModel):
         assert len(action_converter.shape) == 1, 'Only flat action spaces supported by MLP model'
         super().__init__(state_converter, action_converter)
         self.encoder = nn.Sequential(
-            nn.BatchNorm1d(state_converter.shape[0]),
             nn.Linear(state_converter.shape[0], 128),
             nn.ReLU(inplace=True),
             nn.Linear(128, 128),
@@ -199,29 +198,3 @@ class ICMFactory(CuriosityFactory):
     def create(self, state_converter: Converter, action_converter: Converter):
         return ICM(state_converter, action_converter, self.model_factory, self.policy_weight, self.scale, self.weight,
                    self.intrinsic_reward_integration)
-
-
-if __name__ == '__main__':
-    from gym.spaces import Box, Discrete
-
-    states = np.array([
-        [[1., 1.], [2., 2.], [3., 3.]],
-        [[4., 4.], [4., 4.], [5., 5.]]
-    ])
-    actions = np.array([
-        [0., 1., ],
-        [1., 0., ]
-    ])
-    icm = ICM.factory(MlpICMModel.factory(), 1, 2, 0.5, 1.).create(
-        Converter.for_space(Box(0, 5, (2,), np.float32)),
-        Converter.for_space(Discrete(2))
-    )
-    icm.to(torch.device('cpu'), torch.float32)
-    rewards = icm.reward(np.zeros_like(actions), states, actions)
-    assert rewards.shape == (2, 2)
-
-    loss = icm.loss(torch.tensor(10., dtype=torch.float32),
-                    torch.tensor(states[:, :-1].reshape(-1, 2), dtype=torch.float32),
-                    torch.tensor(states[:, 1:].reshape(-1, 2), dtype=torch.float32),
-                    torch.tensor(actions.reshape(-1), dtype=torch.float32))
-    assert loss.shape == ()

@@ -157,7 +157,7 @@ if __name__ == '__main__':
                 # curiosity_factory=NoCuriosity.factory(),
                 reward=GeneralizedRewardEstimation(gamma=0.95, lam=0.1),
                 advantage=GeneralizedAdvantageEstimation(gamma=0.95, lam=0.1),
-                learning_rate=3e-4,
+                learning_rate=4e-4,
                 clip_range=0.3,
                 v_clip_range=0.3,
                 c_entropy=1e-2,

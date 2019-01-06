@@ -4,7 +4,7 @@ from numba import jit
 
 @jit(nopython=True, nogil=True)
 def discount(rewards: np.ndarray, estimate_of_last: np.ndarray, dones: np.ndarray, discount: float):
-    """
+    r"""
     Calculates discounted reward according to equation:
 
     .. math:: G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1} R_{t+n} + \gamma^n V_{t+n-1}(S_{t+n})
@@ -36,37 +36,3 @@ def discount(rewards: np.ndarray, estimate_of_last: np.ndarray, dones: np.ndarra
         v = (r + discount * v * (1. - done)).astype(ret.dtype)
         ret[:, timestep] = v
     return ret
-
-
-if __name__ == '__main__':
-    # given
-    rewards = np.array([
-        [1, 2, 3, 4, 5],
-        [5, 4, 3, 2, 1]
-    ], np.float32)
-    dones = np.array([
-        [0, 0, 1, 0, 0],
-        [0, 0, 0, 0, 0]
-    ], np.float32)
-    estimate_of_last = np.array([6, 0], np.float32)
-    lam = 0.9
-    # when
-    actual = discount(rewards, estimate_of_last, dones, lam)
-    # then
-    expected = np.array([
-        [rewards[0, 0] + lam * (rewards[0, 1] + lam * rewards[0, 2]),
-         rewards[0, 1] + lam * rewards[0, 2],
-         rewards[0, 2],
-         rewards[0, 3] + lam * (rewards[0, 4] + lam * estimate_of_last[0]),
-         rewards[0, 4] + lam * estimate_of_last[0],
-         ],
-        [rewards[1, 0] + lam * (rewards[1, 1] + lam * (
-                rewards[1, 2] + lam * (rewards[1, 3] + lam * (rewards[1, 4] + lam * estimate_of_last[1])))),
-         rewards[1, 1] + lam * (
-                 rewards[1, 2] + lam * (rewards[1, 3] + lam * (rewards[1, 4] + lam * estimate_of_last[1]))),
-         rewards[1, 2] + lam * (rewards[1, 3] + lam * (rewards[1, 4] + lam * estimate_of_last[1])),
-         rewards[1, 3] + lam * (rewards[1, 4] + lam * estimate_of_last[1]),
-         rewards[1, 4] + lam * estimate_of_last[1]
-         ]
-    ])
-    assert np.allclose(expected, actual)

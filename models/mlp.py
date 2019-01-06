@@ -58,16 +58,3 @@ class MLP(Model):
 class MLPFactory(ModelFactory):
     def create(self, state_space: Converter, action_space: Converter) -> Model:
         return MLP(state_space, action_space)
-
-
-if __name__ == '__main__':
-    import torch
-    from gym.spaces import Box, Discrete
-
-    model = MLP.factory().create(Converter.for_space(Box(0, 1, (4,), np.float32)),
-                                 Converter.for_space(Discrete(2)))
-    assert isinstance(model, MLP)
-
-    assert model.value(torch.tensor([[1., 2., 3., 4.], [4., 5., 6., 7.]])).shape == (2, 1)
-    assert model.policy_logits(torch.tensor([[1., 2., 3., 4.], [4., 5., 6., 7.]])).shape == (2, 2)
-    assert isinstance(model.dataset(np.array([[1., 2., 3., 4.], [4., 5., 6., 7.]])), NonSequentialDataset)

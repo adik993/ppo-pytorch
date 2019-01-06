@@ -151,18 +151,3 @@ class MultiEnv(Env):
 
     def astype(self, dtype: Union[object, str]):
         self.dtype = dtype
-
-
-if __name__ == '__main__':
-    env = MultiEnv('CartPole-v1', 2)
-    print(env.observation_space)
-    print(env.action_space)
-    obs = env.reset()
-    for i in range(200):
-        env.render()
-        action = np.array([env.action_space.sample()] * env.n_envs, dtype=np.int64)
-        state, reward, done, aux = env.step(action)
-        assert state.shape == (2, 4)
-        assert reward.shape == (2,)
-        assert done.shape == (2,)
-    env.close()

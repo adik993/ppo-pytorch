@@ -70,14 +70,3 @@ class RandomRunner(Runner):
     def __init__(self, env: MultiEnv):
         from agents import RandomAgent
         super().__init__(env, RandomAgent(env.action_space))
-
-
-if __name__ == '__main__':
-    from agents import RandomAgent
-    env = MultiEnv('CartPole-v1', 2)
-    runner = Runner(env, RandomAgent(env.action_space))
-    states, actions, rewards, dones = runner.run(100, True)
-    assert states.shape == (2, 101, 4)
-    assert actions.shape == (2, 100)
-    assert rewards.shape == (2, 100)
-    assert dones.shape == (2, 100)
