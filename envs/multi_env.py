@@ -5,6 +5,7 @@ import numpy as np
 from gym import Env, make
 
 from envs.utils import tile_images
+from reporters import Reporter, NoReporter
 
 
 class SubProcessEnv(Process):
@@ -39,8 +40,6 @@ class SubProcessEnv(Process):
             elif command == 'seed':
                 self.pipe.send(env.seed(args))
             elif command == 'reset':
-                if steps > 0:
-                    print(f'[{self.env_id}] steps: {steps} reward: {collected_reward} unfinished')
                 steps = 0
                 collected_reward = 0
                 self.pipe.send(env.reset())
@@ -51,11 +50,11 @@ class SubProcessEnv(Process):
                 steps += 1
                 collected_reward += reward
                 if done:
-                    print(f'[{self.env_id}] steps: {steps} reward: {collected_reward}')
+                    state = env.reset()
+                self.pipe.send((state, reward, done, aux, collected_reward))
+                if done:
                     steps = 0
                     collected_reward = 0
-                    state = env.reset()
-                self.pipe.send((state, reward, done, aux))
             elif command == 'close':
                 env.close()
                 break
@@ -70,15 +69,17 @@ class MultiEnv(Env):
             ``done`` signal. It is remembered, but the environment immediately resets and continues starting new episode
     """
 
-    def __init__(self, env_id, n_envs: int):
+    def __init__(self, env_id, n_envs: int, reporter: Reporter = NoReporter()):
         """
 
         :param env_id: name of the environment that ``gym.make`` will be called with
         :param n_envs: number of environments to run simultaneously
+        :param reporter reporter to be used to report rewards
         """
         self._closed = False
         self.env_id = env_id
         self.n_envs: int = n_envs
+        self.reporter = reporter
         self.processes = [SubProcessEnv(env_id, *Pipe()) for _ in range(self.n_envs)]
         self._start()
         self.observation_space = self._get_property(self.processes[0], 'observation_space')
@@ -117,7 +118,8 @@ class MultiEnv(Env):
 
         if len(action) != self.n_envs:
             raise ValueError('Not enough actions supplied')
-        state, reward, done, aux = zip(*self._send_command('step', action))
+        state, reward, done, aux, collected_rewards = zip(*self._send_command('step', action))
+        self._report_steps(done, collected_rewards)
         return np.array(state, dtype=self.dtype), np.array(reward, dtype=self.dtype), \
                np.array(done, dtype=self.dtype), aux
 
@@ -151,3 +153,8 @@ class MultiEnv(Env):
 
     def astype(self, dtype: Union[object, str]):
         self.dtype = dtype
+
+    def _report_steps(self, dones, collected_rewards):
+        for done, reward in zip(dones, collected_rewards):
+            if done:
+                self.reporter.scalar('env/reward', reward)

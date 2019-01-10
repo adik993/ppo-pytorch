@@ -12,6 +12,7 @@ from agents.agent import Agent
 from curiosity import CuriosityFactory
 from envs import MultiEnv
 from models import ModelFactory
+from reporters import Reporter, NoReporter
 from rewards import Reward, Advantage
 
 
@@ -35,19 +36,21 @@ class PPOLoss(_Loss):
 
     """
 
-    def __init__(self, clip_range: float, v_clip_range: float, c_entropy: float, c_value: float):
+    def __init__(self, clip_range: float, v_clip_range: float, c_entropy: float, c_value: float, reporter: Reporter):
         """
 
         :param clip_range: clip range for surrogate function clipping
         :param v_clip_range: clip range for value function clipping
         :param c_entropy: entropy coefficient constant
         :param c_value: value coefficient constant
+        :param reporter: reporter to be used to report loss scalars
         """
         super().__init__()
         self.clip_range = clip_range
         self.v_clip_range = v_clip_range
         self.c_entropy = c_entropy
         self.c_value = c_value
+        self.reporter = reporter
 
     def forward(self, distribution_old: Distribution, value_old: Tensor, distribution: Distribution,
                 value: Tensor, action: Tensor, reward: Tensor, advantage: Tensor):
@@ -73,8 +76,12 @@ class PPOLoss(_Loss):
 
         # Total loss
         losses = policy_loss + self.c_entropy * entropy - self.c_value * value_loss
-        # print(f'policy_loss={policy_loss.item()} value_loss={value_loss.item()} entropy={entropy.item()}')
-        return -losses
+        total_loss = -losses
+        self.reporter.scalar('ppo_loss/policy', -policy_loss.item())
+        self.reporter.scalar('ppo_loss/entropy', -entropy.item())
+        self.reporter.scalar('ppo_loss/value_loss', value_loss.item())
+        self.reporter.scalar('ppo_loss/total', total_loss)
+        return total_loss
 
 
 class PPO(Agent):
@@ -85,7 +92,8 @@ class PPO(Agent):
     def __init__(self, env: MultiEnv, model_factory: ModelFactory, curiosity_factory: CuriosityFactory,
                  reward: Reward, advantage: Advantage, learning_rate: float, clip_range: float, v_clip_range: float,
                  c_entropy: float, c_value: float, n_mini_batches: int, n_optimization_epochs: int,
-                 clip_grad_norm: float) -> None:
+                 clip_grad_norm: float, normalize_state: bool, normalize_reward: bool,
+                 reporter: Reporter = NoReporter()) -> None:
         """
 
         :param env: environment to train on
@@ -102,15 +110,18 @@ class PPO(Agent):
         :param n_optimization_epochs number of optimization epochs on same experience. This value is called ``K``
                in paper
         :param clip_grad_norm: value used to clip gradient by norm
+        :param normalize_state whether to normalize the observations or not
+        :param normalize_reward whether to normalize rewards or not
+        :param reporter: reporter to be used for reporting learning statistics
         """
-        super().__init__(env, model_factory, curiosity_factory)
+        super().__init__(env, model_factory, curiosity_factory, normalize_state, normalize_reward, reporter)
         self.reward = reward
         self.advantage = advantage
         self.n_mini_batches = n_mini_batches
         self.n_optimization_epochs = n_optimization_epochs
         self.clip_grad_norm = clip_grad_norm
         self.optimizer = Adam(chain(self.model.parameters(), self.curiosity.parameters()), learning_rate)
-        self.loss = PPOLoss(clip_range, v_clip_range, c_entropy, c_value)
+        self.loss = PPOLoss(clip_range, v_clip_range, c_entropy, c_value, reporter)
 
     def _train(self, states: np.ndarray, actions: np.ndarray, rewards: np.ndarray, dones: np.ndarray):
         policy_old, values_old = self.model(self._to_tensor(self.state_converter.reshape_as_input(states,
@@ -140,33 +151,3 @@ class PPO(Agent):
                     loss.backward(retain_graph=True)
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm)
                     self.optimizer.step()
-
-
-if __name__ == '__main__':
-    from envs import MultiEnv
-    from models import MLP
-    from rewards import NStepReward, GeneralizedAdvantageEstimation, GeneralizedRewardEstimation
-    from curiosity import ICM, MlpICMModel, NoCuriosity
-
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    agent = PPO(MultiEnv('Pendulum-v0', 10),
-                model_factory=MLP.factory(),
-                curiosity_factory=ICM.factory(MlpICMModel.factory(), policy_weight=1, reward_scale=0.01, weight=0.2,
-                                              intrinsic_reward_integration=0.01),
-                # curiosity_factory=NoCuriosity.factory(),
-                reward=GeneralizedRewardEstimation(gamma=0.95, lam=0.1),
-                advantage=GeneralizedAdvantageEstimation(gamma=0.95, lam=0.1),
-                learning_rate=4e-4,
-                clip_range=0.3,
-                v_clip_range=0.3,
-                c_entropy=1e-2,
-                c_value=0.5,
-                n_mini_batches=32,
-                n_optimization_epochs=10,
-                clip_grad_norm=0.5)
-    agent.to(device, torch.float32, np.float32)
-
-    agent.learn(epochs=25, n_steps=200)
-
-    agent.eval(n_steps=600, render=True)

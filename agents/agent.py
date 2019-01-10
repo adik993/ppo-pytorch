@@ -6,7 +6,8 @@ import torch
 from curiosity import CuriosityFactory
 from envs import Runner, MultiEnv, Converter, RandomRunner
 from models import ModelFactory
-from normalizers import StandardNormalizer, Normalizer
+from normalizers import StandardNormalizer, Normalizer, NoNormalizer
+from reporters import Reporter, NoReporter
 
 
 class Agent:
@@ -14,14 +15,17 @@ class Agent:
     Base interface for agents
     """
 
-    def __init__(self, env: MultiEnv, model_factory: ModelFactory, curiosity_factory: CuriosityFactory) -> None:
+    def __init__(self, env: MultiEnv, model_factory: ModelFactory, curiosity_factory: CuriosityFactory,
+                 normalize_state: bool, normalize_reward: bool, reporter: Reporter = NoReporter()) -> None:
         self.env = env
+        self.reporter = reporter
         self.state_converter = Converter.for_space(self.env.observation_space)
         self.action_converter = Converter.for_space(self.env.action_space)
         self.model = model_factory.create(self.state_converter, self.action_converter)
         self.curiosity = curiosity_factory.create(self.state_converter, self.action_converter)
-        self.reward_normalizer = StandardNormalizer()
-        self.state_normalizer: Normalizer = self.state_converter.state_normalizer()
+        self.reward_normalizer = StandardNormalizer() if normalize_reward else NoNormalizer()
+        self.state_normalizer = self.state_converter.state_normalizer() if normalize_state else NoNormalizer()
+        self.normalize_state = normalize_state
         self.device: torch.device = None
         self.dtype: torch.dtype = None
         self.numpy_dtype: object = None
@@ -65,7 +69,7 @@ class Agent:
         :param render: whether to render the environment during learning
         """
 
-        if initialization_steps:
+        if initialization_steps and self.normalize_state:
             s, _, _, _ = RandomRunner(self.env).run(initialization_steps)
             self.state_normalizer.partial_fit(s)
 

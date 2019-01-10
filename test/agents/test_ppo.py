@@ -11,6 +11,8 @@ from rewards import GeneralizedRewardEstimation, GeneralizedAdvantageEstimation
 
 def agent_continuous():
     agent = PPO(MultiEnv('Pendulum-v0', 10),
+                normalize_state=True,
+                normalize_reward=True,
                 model_factory=MLP.factory(),
                 curiosity_factory=ICM.factory(MlpICMModel.factory(), policy_weight=1, reward_scale=0.01, weight=0.2,
                                               intrinsic_reward_integration=0.01),
@@ -31,6 +33,8 @@ def agent_continuous():
 
 def agent_discrete():
     agent = PPO(MultiEnv('CartPole-v1', 4),
+                normalize_state=False,
+                normalize_reward=False,
                 model_factory=MLP.factory(),
                 curiosity_factory=NoCuriosity.factory(),
                 reward=GeneralizedRewardEstimation(gamma=0.99, lam=0.95),

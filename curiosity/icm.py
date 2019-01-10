@@ -7,6 +7,7 @@ from torch import Tensor, nn
 
 from curiosity.base import Curiosity, CuriosityFactory
 from envs import Converter
+from reporters import Reporter, NoReporter
 
 
 class ICMModel(nn.Module, metaclass=ABCMeta):
@@ -120,7 +121,8 @@ class ICM(Curiosity):
     """
 
     def __init__(self, state_converter: Converter, action_converter: Converter, model_factory: ICMModelFactory,
-                 policy_weight: float, reward_scale: float, weight: float, intrinsic_reward_integration: float):
+                 policy_weight: float, reward_scale: float, weight: float, intrinsic_reward_integration: float,
+                 reporter: Reporter):
         """
 
         :param state_converter: state converter
@@ -133,6 +135,7 @@ class ICM(Curiosity):
         :param weight: balances the importance between forward and inverse model
         :param intrinsic_reward_integration: balances the importance between extrinsic and intrinsic reward. Used when
                incorporating intrinsic into extrinsic in the ``reward`` method
+        :param reporter reporter used to report training statistics
         """
         super().__init__(state_converter, action_converter)
         self.model: ICMModel = model_factory.create(state_converter, action_converter)
@@ -140,6 +143,7 @@ class ICM(Curiosity):
         self.reward_scale = reward_scale
         self.weight = weight
         self.intrinsic_reward_integration = intrinsic_reward_integration
+        self.reporter = reporter
 
     def parameters(self) -> Generator[nn.Parameter, None, None]:
         return self.model.parameters()
@@ -154,6 +158,8 @@ class ICM(Curiosity):
         next_states_latent, next_states_hat, _ = self.model(states, next_states, actions)
         intrinsic_reward = self.reward_scale / 2 * (next_states_hat - next_states_latent).norm(2, dim=-1).pow(2)
         intrinsic_reward = intrinsic_reward.cpu().detach().numpy().reshape(n, t)
+        self.reporter.scalar('icm/reward',
+                             intrinsic_reward.mean().item() if self.reporter.will_report('icm/reward') else 0)
         return (1. - self.intrinsic_reward_integration) * rewards + self.intrinsic_reward_integration * intrinsic_reward
 
     def loss(self, policy_loss: Tensor, states: Tensor, next_states: Tensor, actions: Tensor) -> Tensor:
@@ -161,7 +167,7 @@ class ICM(Curiosity):
         forward_loss = 0.5 * (next_states_hat - next_states_latent.detach()).norm(2, dim=-1).pow(2).mean()
         inverse_loss = self.action_converter.distance(actions_hat, actions)
         curiosity_loss = self.weight * forward_loss + (1 - self.weight) * inverse_loss
-        # print('icm_loss=', curiosity_loss.item())
+        self.reporter.scalar('icm/loss', curiosity_loss.item())
         return self.policy_weight * policy_loss + curiosity_loss
 
     def to(self, device: torch.device, dtype: torch.dtype):
@@ -170,7 +176,7 @@ class ICM(Curiosity):
 
     @staticmethod
     def factory(model_factory: ICMModelFactory, policy_weight: float, reward_scale: float,
-                weight: float, intrinsic_reward_integration: float) -> 'ICMFactory':
+                weight: float, intrinsic_reward_integration: float, reporter: Reporter = NoReporter()) -> 'ICMFactory':
         """
         Creates the factory for the ``ICM``
         :param model_factory: model factory
@@ -181,20 +187,22 @@ class ICM(Curiosity):
         :param weight: balances the importance between forward and inverse model
         :param intrinsic_reward_integration: balances the importance between extrinsic and intrinsic reward. Used when
                incorporating intrinsic into extrinsic in the ``reward`` method
+        :param reporter reporter used to report training statistics
         :return: factory
         """
-        return ICMFactory(model_factory, policy_weight, reward_scale, weight, intrinsic_reward_integration)
+        return ICMFactory(model_factory, policy_weight, reward_scale, weight, intrinsic_reward_integration, reporter)
 
 
 class ICMFactory(CuriosityFactory):
     def __init__(self, model_factory: ICMModelFactory, policy_weight: float, reward_scale: float, weight: float,
-                 intrinsic_reward_integration: float):
+                 intrinsic_reward_integration: float, reporter: Reporter):
         self.policy_weight = policy_weight
         self.model_factory = model_factory
         self.scale = reward_scale
         self.weight = weight
         self.intrinsic_reward_integration = intrinsic_reward_integration
+        self.reporter = reporter
 
     def create(self, state_converter: Converter, action_converter: Converter):
         return ICM(state_converter, action_converter, self.model_factory, self.policy_weight, self.scale, self.weight,
-                   self.intrinsic_reward_integration)
+                   self.intrinsic_reward_integration, self.reporter)
